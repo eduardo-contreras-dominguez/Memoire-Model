@@ -1,17 +1,14 @@
-import pandas as pd
-from xbbg import blp
-from config import MODEL_INDICATORS
-import datetime as dt
-from datetime import timedelta
-import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib import rcParams
-import plotly.graph_objects as go
-from tqdm import tqdm
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
+import numpy as np
+import pandas as pd
 import tensorflow as tf
 from tensorflow.keras.utils import to_categorical
+from matplotlib import rcParams
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from xbbg import blp
+
+from config import MODEL_INDICATORS
 
 
 class HistoricalMacroDataRetriever:
@@ -80,18 +77,30 @@ class EconomicModel:
     def __init__(self):
         d = HistoricalMacroDataRetriever()
         self.historical_df = d.retrieving_data().set_index(d.retrieving_data().columns[0])
+        # Machine Learning Parameters:
+        self.feature_train = None
+        self.feature_test = None
+        self.label_train = None
+        self.label_test = None
         self.model = None
 
     def ModelPreProcessing(self):
-        X = self.historical_df.drop('Target', axis=1)
-        y = self.historical_df['Target']
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=5)
+        # Scaling Features
         scaler = StandardScaler()
-        X_train_scaled = scaler.fit_transform(X_train)
-        X_test_scaled = scaler.fit_transform(X_test)
-        return X_train_scaled, X_test_scaled, y_train, y_test
+        X = scaler.fit_transform(self.historical_df.drop('Target', axis=1))
 
-    def Modeling(self, X, y):
+        # Transforming integer labels into 0,1 arrays
+        y = to_categorical(self.historical_df['Target'], num_classes=4)
+        self.feature_train, self.feature_test, self.label_train, self.label_test = train_test_split(X, y, test_size=0.2,
+                                                                                                    random_state=5)
+        # Scaling Features
+
+        # self.feature_train = scaler.fit_transform(self.feature_train)
+        # self.feature_test = scaler.fit_transform(self.feature_test)
+
+        return 0
+
+    def Fitting_Model(self):
         # input_layer_size = self.historical_df.shape[1]
         # hidden_layer_size = input_layer_size * 2
         output_layer_size = len(self.historical_df['Target'].unique())
@@ -99,26 +108,31 @@ class EconomicModel:
             tf.keras.layers.Dense(128, activation='relu'),
             tf.keras.layers.Dense(256, activation='relu'),
             tf.keras.layers.Dense(256, activation='relu'),
-            tf.keras.layers.Dense(output_layer_size, activation='sigmoid')
+            tf.keras.layers.Dense(output_layer_size, activation='softmax')
         ])
-        model.compile(loss='sparse_categorical_crossentropy',
+        model.compile(loss='categorical_crossentropy',
                       optimizer='adam',
                       metrics=['accuracy'])
-        model.fit(X, y, epochs=100)
+        model.fit(self.feature_train, self.label_train, epochs=100)
         self.model = model
         return self.model
 
-    def ModelEvaluation(self):
+    def Evaluate_Model(self):
         rcParams['figure.figsize'] = (18, 8)
         plt.plot(np.arange(1, 101), self.model.history.history['loss'], label="Loss")
         plt.show()
         pass
 
-    def ModelPrediction(self, X, y):
-        #predictions = self
+    def Model_Prediction(self):
+        predictions = self.model.predict(self.feature_test)
+        expected = self.label_test
+        print(expected)
+        print(predictions)
         pass
+
 
 m_model = EconomicModel()
 data = m_model.ModelPreProcessing()
-model = m_model.Modeling(data[0], data[2])
-m_model.ModelEvaluation()
+model = m_model.Fitting_Model()
+m_model.Evaluate_Model()
+m_model.Model_Prediction()
