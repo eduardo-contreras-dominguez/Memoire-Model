@@ -1,8 +1,10 @@
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
+import seaborn as sns
 import tensorflow as tf
 from matplotlib import rcParams
-from sklearn.metrics import confusion_matrix, accuracy_score
+from sklearn.metrics import confusion_matrix
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
@@ -78,7 +80,7 @@ class EconomicModel:
     def __init__(self):
         d = HistoricalMacroDataRetriever()
         self.historical_df = d.retrieving_data().set_index(d.retrieving_data().columns[0])
-        self.model_type = "NN"
+        self.model_type = "SVC"
         # Machine Learning Parameters:
         self.feature = None
         # self.feature_test = None
@@ -97,6 +99,7 @@ class EconomicModel:
             # self.feature_train, self.feature_test, self.label_train, self.label_test = train_test_split(X, y, test_size=0.2,
             #                                                                                            random_state=5)
         else:
+            self.historical_df["Target"] = self.historical_df["Target"] + 1
             self.feature = self.historical_df.drop("Target", axis=1)
             self.label = self.historical_df["Target"]
 
@@ -133,19 +136,17 @@ class EconomicModel:
         # Step 4: Fit the SVM model
         classifier = SVC(kernel='rbf', random_state=0)
         classifier.fit(X_train, y_train)
-
+        self.model = classifier
         # Step 5: Predict the test results
         y_pred = classifier.predict(X_test)
 
         # Step 6: Plot the confusion matrix: Which predictions are right and which are wrong?
-        cm = confusion_matrix(y_test, y_pred)
-        print(cm)
-        accuracy_score(y_test, y_pred)
-        return 0
+        # The confusion matrix will be plotted on the method: Plot_Model()
+        return y_test, y_pred
 
     def Plot_Model(self):
+        rcParams['figure.figsize'] = (18, 8)
         if self.model_type == "NN":
-            rcParams['figure.figsize'] = (18, 8)
             plt.plot(self.model.history.history["accuracy"])
             plt.plot(self.model.history.history["val_accuracy"])
             plt.title("Model Accuracy")
@@ -153,12 +154,22 @@ class EconomicModel:
             plt.ylabel("Accuracy")
             plt.legend(['Train', 'Test'], loc='upper left')
             plt.show()
-            return 0
         else:
-            pass
+            y_test, y_pred = self.Fitting_Model_SVC()
+            cf_matrix = confusion_matrix(y_test, y_pred)
+            print(cf_matrix)
+            sns.heatmap(cf_matrix / np.sum(cf_matrix), annot=True,
+                        fmt='.2%', cmap='Blues')
+            plt.title("Confusion Matrix")
+            plt.xlabel("Predicted")
+            plt.xticks(range(len(cf_matrix)), [i for i in range(1, 5)])
+            plt.yticks(range(len(cf_matrix)), [i for i in range(1, 5)])
+            plt.ylabel("Actual")
+            plt.show()
+        return 0
 
 
 m_model = EconomicModel()
 data = m_model.ModelPreProcessing()
-model = m_model.Fitting_Model_NN()
+model = m_model.Fitting_Model_SVC()
 m_model.Plot_Model()
