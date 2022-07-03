@@ -9,7 +9,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 from tensorflow.keras.utils import to_categorical
-from xbbg import blp
+#from xbbg import blp
 
 from config import MODEL_INDICATORS
 
@@ -77,10 +77,10 @@ class HistoricalMacroDataRetriever:
 
 
 class EconomicModel:
-    def __init__(self):
+    def __init__(self, model_type="SVC"):
         d = HistoricalMacroDataRetriever()
         self.historical_df = d.retrieving_data().set_index(d.retrieving_data().columns[0])
-        self.model_type = "SVC"
+        self.model_type = model_type
         # Machine Learning Parameters:
         self.feature = None
         # self.feature_test = None
