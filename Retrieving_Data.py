@@ -1,17 +1,17 @@
-import pandas as pd
-from xbbg import blp
-from config import MODEL_INDICATORS
-import datetime as dt
-from datetime import timedelta
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
+import tensorflow as tf
 from matplotlib import rcParams
-import plotly.graph_objects as go
-from tqdm import tqdm
+from sklearn.metrics import confusion_matrix
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-import tensorflow as tf
+from sklearn.svm import SVC
 from tensorflow.keras.utils import to_categorical
+#from xbbg import blp
+
+from config import MODEL_INDICATORS
 
 
 class HistoricalMacroDataRetriever:
@@ -77,48 +77,99 @@ class HistoricalMacroDataRetriever:
 
 
 class EconomicModel:
-    def __init__(self):
+    def __init__(self, model_type="SVC"):
         d = HistoricalMacroDataRetriever()
         self.historical_df = d.retrieving_data().set_index(d.retrieving_data().columns[0])
+        self.model_type = model_type
+        # Machine Learning Parameters:
+        self.feature = None
+        # self.feature_test = None
+        self.label = None
+        # self.label_test = None
         self.model = None
 
     def ModelPreProcessing(self):
-        X = self.historical_df.drop('Target', axis=1)
-        y = self.historical_df['Target']
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=5)
-        scaler = StandardScaler()
-        X_train_scaled = scaler.fit_transform(X_train)
-        X_test_scaled = scaler.fit_transform(X_test)
-        return X_train_scaled, X_test_scaled, y_train, y_test
+        # Scaling Features
+        if self.model_type == "NN":
+            scaler = StandardScaler()
+            self.feature = scaler.fit_transform(self.historical_df.drop('Target', axis=1))
 
-    def Modeling(self, X, y):
-        # input_layer_size = self.historical_df.shape[1]
-        # hidden_layer_size = input_layer_size * 2
+            # Transforming integer labels into 0,1 arrays
+            self.label = to_categorical(self.historical_df['Target'], num_classes=4)
+            # self.feature_train, self.feature_test, self.label_train, self.label_test = train_test_split(X, y, test_size=0.2,
+            #                                                                                            random_state=5)
+        else:
+            self.historical_df["Target"] = self.historical_df["Target"] + 1
+            self.feature = self.historical_df.drop("Target", axis=1)
+            self.label = self.historical_df["Target"]
+
+        return 0
+
+    def Fitting_Model_NN(self):
+        input_layer_size = self.feature.shape[1]
+        hidden_layer_size = input_layer_size * 2
         output_layer_size = len(self.historical_df['Target'].unique())
         model = tf.keras.Sequential([
-            tf.keras.layers.Dense(128, activation='relu'),
-            tf.keras.layers.Dense(256, activation='relu'),
-            tf.keras.layers.Dense(256, activation='relu'),
-            tf.keras.layers.Dense(output_layer_size, activation='sigmoid')
+            # tf.keras.layers.Dense(input_layer_size, activation='relu'),
+            # tf.keras.layers.Dense(hidden_layer_size, activation='relu'),
+            tf.keras.layers.Dense(1024, input_dim=input_layer_size, activation='relu'),
+            tf.keras.layers.Dense(output_layer_size, activation='softmax')
         ])
-        model.compile(loss='sparse_categorical_crossentropy',
+        model.compile(loss='categorical_crossentropy',
                       optimizer='adam',
                       metrics=['accuracy'])
-        model.fit(X, y, epochs=100)
+        model.fit(self.feature, self.label, validation_split=0.15, epochs=100, batch_size=5)
         self.model = model
         return self.model
 
-    def ModelEvaluation(self):
-        rcParams['figure.figsize'] = (18, 8)
-        plt.plot(np.arange(1, 101), self.model.history.history['loss'], label="Loss")
-        plt.show()
-        pass
+    def Fitting_Model_SVC(self):
+        # Step 1: Split Dataset into Features and Label
 
-    def ModelPrediction(self, X, y):
-        #predictions = self
-        pass
+        # Step 2: Split X and y into Train and Test Dataset.
+        X_train, X_test, y_train, y_test = train_test_split(self.feature, self.label, test_size=0.25, random_state=0)
+
+        # Step 3: Feature Scaling
+        sc = StandardScaler()
+        X_train = sc.fit_transform(X_train)
+        X_test = sc.transform(X_test)
+
+        # Step 4: Fit the SVM model
+        classifier = SVC(kernel='rbf', random_state=0)
+        classifier.fit(X_train, y_train)
+        self.model = classifier
+        # Step 5: Predict the test results
+        y_pred = classifier.predict(X_test)
+
+        # Step 6: Plot the confusion matrix: Which predictions are right and which are wrong?
+        # The confusion matrix will be plotted on the method: Plot_Model()
+        return y_test, y_pred
+
+    def Plot_Model(self):
+        rcParams['figure.figsize'] = (18, 8)
+        if self.model_type == "NN":
+            plt.plot(self.model.history.history["accuracy"])
+            plt.plot(self.model.history.history["val_accuracy"])
+            plt.title("Model Accuracy")
+            plt.xlabel("Epoch")
+            plt.ylabel("Accuracy")
+            plt.legend(['Train', 'Test'], loc='upper left')
+            plt.show()
+        else:
+            y_test, y_pred = self.Fitting_Model_SVC()
+            cf_matrix = confusion_matrix(y_test, y_pred)
+            print(cf_matrix)
+            sns.heatmap(cf_matrix / np.sum(cf_matrix), annot=True,
+                        fmt='.2%', cmap='Blues')
+            plt.title("Confusion Matrix")
+            plt.xlabel("Predicted")
+            plt.xticks(range(len(cf_matrix)), [i for i in range(1, 5)])
+            plt.yticks(range(len(cf_matrix)), [i for i in range(1, 5)])
+            plt.ylabel("Actual")
+            plt.show()
+        return 0
+
 
 m_model = EconomicModel()
 data = m_model.ModelPreProcessing()
-model = m_model.Modeling(data[0], data[2])
-m_model.ModelEvaluation()
+model = m_model.Fitting_Model_SVC()
+m_model.Plot_Model()
